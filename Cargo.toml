@@ -1,0 +1,8 @@
+[package]
+name = "conways"
+version = "0.1.0"
+authors = ["mgurga"]
+edition = "2018"
+
+[dependencies]
+rand = "0.8.0"
