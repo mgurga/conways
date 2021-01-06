@@ -7,12 +7,8 @@ use sfml::{
     window::{ContextSettings, Event, Key, Style},
 };
 use rand::Rng;
-
-const BOARDWIDTH: usize = 75;      // the width of the board
-const BOARDHEIGHT: usize = 50;     // the height of the board
-const BOARDSCALE: usize = 10;      // how large the board should be scaled in the window
-const RANDOMSPORES: usize = 500;   // the amount of random spores on the board at startup
-const CONSOLEOUTPUT: bool = false; // print the board to the terminal
+use clap::{Arg, App};
+use std::time::Instant;
 
 #[derive(Copy, Clone)]
 struct Spore {
@@ -21,18 +17,64 @@ struct Spore {
 }
 
 fn main() {
+    // get command line options
+    let clapapp = App::new("Conways")
+        .version("0.0.1")
+        .about("creates a graphical 'conways game of life' game")
+        .arg(Arg::new("width")
+            .short('w')
+            .long("width")
+            .value_name("BOARDWIDTH")
+            .about("sets the width of the board")
+            .default_value("75")
+            .takes_value(true))
+        .arg(Arg::new("height")
+            .short('h')
+            .long("height")
+            .value_name("BOARDHEIGHT")
+            .about("sets the height of the board")
+            .default_value("50")
+            .takes_value(true))
+        .arg(Arg::new("scale")
+            .short('s')
+            .long("scale")
+            .value_name("BOARDSCALE")
+            .about("increases the size of each spore in the window")
+            .default_value("10")
+            .takes_value(true))
+        .arg(Arg::new("randomspores")
+            .short('r')
+            .long("randomspores")
+            .value_name("RANDOMSPORES")
+            .about("the amount of random spores to spawn at startup")
+            .default_value("500")
+            .takes_value(true))
+        .arg(Arg::new("consoleonly")
+            .short('c')
+            .long("consoleonly")
+            .value_name("CONSOLEONLY")
+            .about("do not create window and only output to console")
+            .takes_value(false))
+        .get_matches();
+
+    let boardwidth: usize = clapapp.value_of_t("width").unwrap();
+    let boardheight: usize = clapapp.value_of_t("height").unwrap();
+    let boardscale: usize = clapapp.value_of_t("scale").unwrap();
+    let randomspores: usize = clapapp.value_of_t("randomspores").unwrap();
+    let consoleonly: bool = clapapp.is_present("consoleonly");
+
     // creates the board
-    let mut board = [[Spore {alive: false, dietime: -1}; BOARDWIDTH]; BOARDHEIGHT];
+    let mut board = vec![vec![Spore {alive: false, dietime: -1}; boardwidth]; boardheight];
     let mut rng = rand::thread_rng();
 
     // creates random spores
-    for _ in 0..RANDOMSPORES { 
-        board[rng.gen_range(1..(BOARDHEIGHT-1))][rng.gen_range(1..(BOARDWIDTH-1))] = Spore {alive: true, dietime: 0};
+    for _ in 0..randomspores { 
+        board[rng.gen_range(1..(boardheight-1))][rng.gen_range(1..(boardwidth-1))] = Spore {alive: true, dietime: 0};
     }
-
+    
     // initalize the window
     let mut window = RenderWindow::new(
-        ((BOARDWIDTH * BOARDSCALE) as u32, (BOARDHEIGHT * BOARDSCALE) as u32),
+        ((boardwidth * boardscale) as u32, (boardheight * boardscale) as u32),
         "Conways",
         Style::CLOSE,
         &ContextSettings::default()
@@ -43,9 +85,31 @@ fn main() {
 
     let mut block = RectangleShape::new();
     block.set_fill_color(Color::BLACK);
-    block.set_size(Vector2f::new(BOARDSCALE as f32, BOARDSCALE as f32));
+    block.set_size(Vector2f::new(boardscale as f32, boardscale as f32));
 
     loop {
+        // print board to console
+        if consoleonly {
+            print_board(&board, frame, boardwidth);
+        } else {
+            // update title with frame
+            window.set_title(&format!("Conways, Frame: {}", frame));
+
+            // draw board to window
+            window.clear(Color::WHITE);
+
+            for i in 0..boardheight {
+                for j in 0..boardwidth {
+                    if board[i][j].alive == true {
+                        block.set_position(Vector2f::new((j * boardscale) as f32, (i * boardscale) as f32));
+                        window.draw(&block.clone());
+                    }
+                }
+            }
+
+            window.display();
+        }
+
         // check for key presses, partly copied from rust-sfml docs
         while let Some(event) = window.poll_event() {
             // if Escape is pressed close the window
@@ -61,77 +125,66 @@ fn main() {
                 Event::KeyPressed {
                     code: Key::Space, ..
                 } => {
-                    board = update_board(&board, frame);
+                    let start = Instant::now();
+                    board = update_board(&board, frame, boardwidth, boardheight);
                     frame+=1;
+                    let duration = start.elapsed();
+                    println!("Took {:?} to update frame {}", duration, frame);
                 },
                 _ => {}
             }
         }
-
-        // update title with frame
-        window.set_title(&format!("Conways, Frame: {}", frame));
-
-        // print board to console
-        if CONSOLEOUTPUT {
-            let lines = String::from("_".repeat(BOARDWIDTH*2));
-            println!("Frame: {}", frame);
-            println!("{}", lines);
-            for column in board.iter() {
-                let mut outline = String::new();
-                for element in column.iter() {
-                    if element.alive == true {
-                        outline.push_str("O ");
-                    } else {
-                        outline.push_str(". ");
-                    }
-                }
-                println!("{}", outline);
-            }
-            println!("{}", lines);
-        }
-
-        // draw board to window
-        window.clear(Color::WHITE);
-        for i in 0..BOARDHEIGHT {
-            for j in 0..BOARDWIDTH {
-                if board[i][j].alive == true {
-                    block.set_position(Vector2f::new((j * BOARDSCALE) as f32, (i * BOARDSCALE) as f32));
-                    window.draw(&block.clone());
-                }
-            }
-        }
-        window.display();
     }
 }
 
-fn update_board(board: &[[Spore; BOARDWIDTH]; BOARDHEIGHT], frame: usize) -> [[Spore; BOARDWIDTH]; BOARDHEIGHT] {
-    let mut outboard = [[Spore {alive: false, dietime: -1}; BOARDWIDTH]; BOARDHEIGHT];
-
-    for i in 0..BOARDHEIGHT {
-        for j in 0..BOARDWIDTH {
-            let neighbours: usize = get_neighbours(board, j, i);
-
-            // 1. Any live cell with fewer than two live neighbours dies, as if by underpopulation.
-            if board[i][j].alive == true && neighbours < 2 {
-                outboard[i][j].alive = false;
-                outboard[i][j].dietime = frame as isize;
+fn print_board(board: &Vec<Vec<Spore>>, frame: usize, width: usize) {
+    let lines = String::from("_".repeat(width*2));
+    println!("Frame: {}", frame);
+    println!("{}", lines);
+    for column in board.iter() {
+        let mut outline = String::new();
+        for element in column.iter() {
+            if element.alive == true {
+                outline.push_str("O ");
+            } else {
+                outline.push_str(". ");
             }
+        }
+        println!("{}", outline);
+    }
+    println!("{}", lines);
+}
 
-            // 2. Any live cell with two or three live neighbours lives on to the next generation.
-            if board[i][j].alive == true && (neighbours == 2 || neighbours == 3) {
-                outboard[i][j] = board[i][j];
-            }
+fn update_board(board: &Vec<Vec<Spore>>, frame: usize, width: usize, height: usize) -> Vec<Vec<Spore>> {
+    let mut outboard = vec![vec![Spore {alive: false, dietime: -1}; width]; height];
 
-            // 3. Any live cell with more than three live neighbours dies, as if by overpopulation.
-            if board[i][j].alive == true && neighbours > 3 {
-                outboard[i][j].alive = false;
-                outboard[i][j].dietime = frame as isize;
-            }
+    for i in 0..height {
+        for j in 0..width {
+            let neighbours: usize = get_neighbours(board, j, i, width, height);
 
-            // 4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
-            if board[i][j].alive == false && neighbours == 3 {
-                outboard[i][j].alive = true;
-                outboard[i][j].dietime = -1;
+            if board[i][j].alive == true {
+                // 1. Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+                if neighbours < 2 {
+                    outboard[i][j].alive = false;
+                    outboard[i][j].dietime = frame as isize;
+                }
+
+                // 2. Any live cell with two or three live neighbours lives on to the next generation.
+                if neighbours == 2 || neighbours == 3 {
+                    outboard[i][j] = board[i][j];
+                }
+
+                // 3. Any live cell with more than three live neighbours dies, as if by overpopulation.
+                if neighbours > 3 {
+                    outboard[i][j].alive = false;
+                    outboard[i][j].dietime = frame as isize;
+                }
+            } else {
+                // 4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+                if neighbours == 3 {
+                    outboard[i][j].alive = true;
+                    outboard[i][j].dietime = -1;
+                }
             }
         }
     }
@@ -139,10 +192,10 @@ fn update_board(board: &[[Spore; BOARDWIDTH]; BOARDHEIGHT], frame: usize) -> [[S
     return outboard;
 }
 
-fn get_neighbours(board: &[[Spore; BOARDWIDTH]; BOARDHEIGHT], x: usize, y: usize) -> usize {
+fn get_neighbours(board: &Vec<Vec<Spore>>, x: usize, y: usize, width: usize, height: usize) -> usize {
     let mut neighbours: usize = 0;
     //println!("x: {}, y: {}, neighbors: {}", x, y, neighbours);
-    if x == 0 || y == 0 || x == BOARDWIDTH - 1 || y == BOARDHEIGHT - 1 {
+    if x == 0 || y == 0 || x == width - 1 || y == height - 1 {
         return 0;
     }
 
