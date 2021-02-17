@@ -1,5 +1,7 @@
 # Conways
-Conway's game of life in rust with a graphical frontend, read about the rules [here](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
+Conway's game of life in rust with a graphical frontend. Read about the rules [here](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life). Press space to advance frame.
+
+![framegif](https://raw.githubusercontent.com/mgurga/conways/master/docs/window.gif)
 
 ## Usage
 ```
